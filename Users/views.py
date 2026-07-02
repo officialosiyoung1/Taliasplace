@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
+# from django_contrib.auth import authenticate
 
 class AllUsersView(APIView):
     permission_classes = [IsAuthenticated]
@@ -56,3 +57,11 @@ class SigninView(APIView):
                 return Response({"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+#endpoint for updating user details, only for authenticated users
+#endpoint for deleting user, only for authenticated users 
+#endpoint forgetting password, only for authenticated users
+#endpoint for resetting password, only for authenticated users
+
+
+
