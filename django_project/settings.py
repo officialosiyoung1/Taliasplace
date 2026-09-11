@@ -29,8 +29,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
+    "taliasplace-fdbw.onrender.com",
 ]
-
 
 # Application definition
 
@@ -66,6 +66,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:5174",
+    "https://taliasplace.onrender.com",
 ]
 ROOT_URLCONF = 'django_project.urls'
 
