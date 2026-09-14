@@ -5,9 +5,6 @@ from .models import Booking
 
 
 class BookingSerializer(serializers.ModelSerializer):
-    # allow clients to POST/GET camelCase `appointmentType` while using
-    # snake_case `appointment_type` on the model
-    appointmentType = serializers.CharField(source="appointment_type")
 
     class Meta:
         model = Booking
@@ -19,7 +16,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "service",
             "date",
             "time",
-            "appointmentType",
+            "appointment_type",
             "message",
             "status",
             "created_at",
