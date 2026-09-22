@@ -21,7 +21,7 @@ def get_active_smtp_config():
 
     # Fallback to settings.py or sensible defaults
     class FallbackConfig:
-        smtp_host = getattr(settings, "EMAIL_HOST", None) or "mail.taliasplace.com"
+        smtp_host = getattr(settings, "EMAIL_HOST", None) or "smtp.gmail.com"
         smtp_port = getattr(settings, "EMAIL_PORT", None) or 465
         security_mode = "SSL" if getattr(settings, "EMAIL_USE_SSL", True) else "TLS"
         webmail_user = getattr(settings, "EMAIL_HOST_USER", None) or ""
@@ -42,7 +42,7 @@ def get_backend_for_config(config):
     use_tls = (security_mode == "TLS")
 
     return EmailBackend(
-        host=getattr(config, "smtp_host", "mail.taliasplace.com"),
+        host=getattr(config, "smtp_host", "smtp.gmail.com"),
         port=getattr(config, "smtp_port", 465),
         username=getattr(config, "webmail_user", ""),
         password=getattr(config, "webmail_password", ""),
@@ -134,6 +134,10 @@ def send_contact_notification(contact_instance):
     """
     try:
         config = get_active_smtp_config()
+        if not getattr(config, "webmail_user", None) or not getattr(config, "webmail_password", None):
+            logger.warning("SMTP credentials not configured (EMAIL_HOST_USER / EMAIL_HOST_PASSWORD missing). Skipping email dispatch.")
+            return False
+
         backend = get_backend_for_config(config)
 
         subject = f"💌 New Contact Message from {contact_instance.name}"
@@ -200,6 +204,10 @@ def send_booking_notification(booking_instance):
     """
     try:
         config = get_active_smtp_config()
+        if not getattr(config, "webmail_user", None) or not getattr(config, "webmail_password", None):
+            logger.warning("SMTP credentials not configured (EMAIL_HOST_USER / EMAIL_HOST_PASSWORD missing). Skipping email dispatch.")
+            return False
+
         backend = get_backend_for_config(config)
 
         service_name = getattr(booking_instance, "get_service_display", lambda: getattr(booking_instance, "service", "Unknown"))()
