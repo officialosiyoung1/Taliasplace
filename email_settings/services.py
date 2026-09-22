@@ -10,23 +10,26 @@ logger = logging.getLogger(__name__)
 def get_active_smtp_config():
     """
     Retrieve active SMTPSettings from database.
-    If none exists, create and return a fallback object based on settings.py / .env.
+    If none exists or table is not yet migrated, create and return a fallback object.
     """
-    config = SMTPSettings.objects.filter(is_active=True).first()
-    if config:
-        return config
+    try:
+        config = SMTPSettings.objects.filter(is_active=True).first()
+        if config:
+            return config
+    except Exception as exc:
+        logger.warning(f"Could not load active SMTPSettings from database: {exc}")
 
-    # Fallback to settings.py
+    # Fallback to settings.py or sensible defaults
     class FallbackConfig:
-        smtp_host = getattr(settings, "EMAIL_HOST", "mail.taliasplace.com")
-        smtp_port = getattr(settings, "EMAIL_PORT", 465)
+        smtp_host = getattr(settings, "EMAIL_HOST", None) or "mail.taliasplace.com"
+        smtp_port = getattr(settings, "EMAIL_PORT", None) or 465
         security_mode = "SSL" if getattr(settings, "EMAIL_USE_SSL", True) else "TLS"
-        webmail_user = getattr(settings, "EMAIL_HOST_USER", "")
-        webmail_password = getattr(settings, "EMAIL_HOST_PASSWORD", "")
-        default_from_email = getattr(settings, "DEFAULT_FROM_EMAIL", webmail_user)
+        webmail_user = getattr(settings, "EMAIL_HOST_USER", None) or ""
+        webmail_password = getattr(settings, "EMAIL_HOST_PASSWORD", None) or ""
+        default_from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or webmail_user or "info@taliasplace.com"
         notification_recipient_email = getattr(
-            settings, "CONTACT_NOTIFICATION_EMAIL", "perpetualasadueze@gmail.com"
-        )
+            settings, "CONTACT_NOTIFICATION_EMAIL", None
+        ) or "perpetualasadueze@gmail.com"
     return FallbackConfig()
 
 
@@ -34,14 +37,15 @@ def get_backend_for_config(config):
     """
     Instantiate a Django SMTP EmailBackend dynamically using the given configuration.
     """
-    use_ssl = (config.security_mode == "SSL")
-    use_tls = (config.security_mode == "TLS")
+    security_mode = getattr(config, "security_mode", "SSL")
+    use_ssl = (security_mode == "SSL")
+    use_tls = (security_mode == "TLS")
 
     return EmailBackend(
-        host=config.smtp_host,
-        port=config.smtp_port,
-        username=config.webmail_user,
-        password=config.webmail_password,
+        host=getattr(config, "smtp_host", "mail.taliasplace.com"),
+        port=getattr(config, "smtp_port", 465),
+        username=getattr(config, "webmail_user", ""),
+        password=getattr(config, "webmail_password", ""),
         use_ssl=use_ssl,
         use_tls=use_tls,
         timeout=10,
@@ -128,52 +132,52 @@ def send_contact_notification(contact_instance):
     """
     Sends an inquiry email notification to admin whenever a contact message is submitted.
     """
-    config = get_active_smtp_config()
-    backend = get_backend_for_config(config)
-
-    subject = f"💌 New Contact Message from {contact_instance.name}"
-    from_email = config.default_from_email or config.webmail_user
-    to_email = config.notification_recipient_email
-
-    text_body = (
-        f"You have received a new contact inquiry on Talia's Place:\n\n"
-        f"Name: {contact_instance.name}\n"
-        f"Email: {contact_instance.email}\n\n"
-        f"Message:\n{contact_instance.message}\n"
-    )
-
-    html_body = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #f3f4f6; border-radius: 16px; background-color: #ffffff;">
-        <div style="background-color: #000000; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 24px;">
-            <h2 style="color: #ffffff; margin: 0; font-size: 22px;">Talias<span style="color: #ec4899;">.</span>Place</h2>
-            <p style="color: #9ca3af; font-size: 13px; margin: 4px 0 0 0;">New Website Inquiry</p>
-        </div>
-        
-        <h3 style="color: #111827; margin: 0 0 16px 0; font-size: 18px;">Contact Message Details</h3>
-        
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px;">
-            <tr style="border-bottom: 1px solid #f3f4f6;">
-                <td style="padding: 10px 0; color: #6b7280; width: 120px;"><strong>Client Name:</strong></td>
-                <td style="padding: 10px 0; color: #111827; font-weight: 500;">{contact_instance.name}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #f3f4f6;">
-                <td style="padding: 10px 0; color: #6b7280;"><strong>Email Address:</strong></td>
-                <td style="padding: 10px 0;"><a href="mailto:{contact_instance.email}" style="color: #ec4899; text-decoration: none;">{contact_instance.email}</a></td>
-            </tr>
-        </table>
-
-        <div style="background-color: #f9fafb; border-left: 4px solid #ec4899; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
-            <p style="margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; color: #6b7280; font-weight: 600;">Message Content:</p>
-            <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">{contact_instance.message}</p>
-        </div>
-
-        <div style="text-align: center; border-top: 1px solid #f3f4f6; padding-top: 16px; font-size: 12px; color: #9ca3af;">
-            This email was generated from your website contact form.
-        </div>
-    </div>
-    """
-
     try:
+        config = get_active_smtp_config()
+        backend = get_backend_for_config(config)
+
+        subject = f"💌 New Contact Message from {contact_instance.name}"
+        from_email = getattr(config, "default_from_email", None) or getattr(config, "webmail_user", None) or "info@taliasplace.com"
+        to_email = getattr(config, "notification_recipient_email", None) or getattr(settings, "CONTACT_NOTIFICATION_EMAIL", "perpetualasadueze@gmail.com")
+
+        text_body = (
+            f"You have received a new contact inquiry on Talia's Place:\n\n"
+            f"Name: {contact_instance.name}\n"
+            f"Email: {contact_instance.email}\n\n"
+            f"Message:\n{contact_instance.message}\n"
+        )
+
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #f3f4f6; border-radius: 16px; background-color: #ffffff;">
+            <div style="background-color: #000000; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 24px;">
+                <h2 style="color: #ffffff; margin: 0; font-size: 22px;">Talias<span style="color: #ec4899;">.</span>Place</h2>
+                <p style="color: #9ca3af; font-size: 13px; margin: 4px 0 0 0;">New Website Inquiry</p>
+            </div>
+            
+            <h3 style="color: #111827; margin: 0 0 16px 0; font-size: 18px;">Contact Message Details</h3>
+            
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px;">
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px 0; color: #6b7280; width: 120px;"><strong>Client Name:</strong></td>
+                    <td style="padding: 10px 0; color: #111827; font-weight: 500;">{contact_instance.name}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px 0; color: #6b7280;"><strong>Email Address:</strong></td>
+                    <td style="padding: 10px 0;"><a href="mailto:{contact_instance.email}" style="color: #ec4899; text-decoration: none;">{contact_instance.email}</a></td>
+                </tr>
+            </table>
+
+            <div style="background-color: #f9fafb; border-left: 4px solid #ec4899; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
+                <p style="margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; color: #6b7280; font-weight: 600;">Message Content:</p>
+                <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">{contact_instance.message}</p>
+            </div>
+
+            <div style="text-align: center; border-top: 1px solid #f3f4f6; padding-top: 16px; font-size: 12px; color: #9ca3af;">
+                This email was generated from your website contact form.
+            </div>
+        </div>
+        """
+
         msg = EmailMultiAlternatives(
             subject=subject,
             body=text_body,
@@ -194,87 +198,87 @@ def send_booking_notification(booking_instance):
     """
     Sends an appointment booking alert to admin whenever a BookMe request is submitted.
     """
-    config = get_active_smtp_config()
-    backend = get_backend_for_config(config)
-
-    service_name = getattr(booking_instance, "get_service_display", lambda: booking_instance.service)()
-    apt_type = getattr(booking_instance, "get_appointment_type_display", lambda: booking_instance.appointment_type)()
-
-    subject = f"✨ New Booking Request: {booking_instance.name} - {service_name}"
-    from_email = config.default_from_email or config.webmail_user
-    to_email = config.notification_recipient_email
-
-    text_body = (
-        f"You have received a new appointment booking request on Talia's Place:\n\n"
-        f"Client Name: {booking_instance.name}\n"
-        f"Email: {booking_instance.email}\n"
-        f"Phone: {booking_instance.phone}\n"
-        f"Service: {service_name}\n"
-        f"Date: {booking_instance.date}\n"
-        f"Time: {booking_instance.time}\n"
-        f"Appointment Type: {apt_type}\n\n"
-        f"Client Notes:\n{booking_instance.message or 'None'}\n"
-    )
-
-    html_body = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #f3f4f6; border-radius: 16px; background-color: #ffffff;">
-        <div style="background-color: #000000; padding: 24px; border-radius: 12px; text-align: center; margin-bottom: 24px;">
-            <h2 style="color: #ffffff; margin: 0; font-size: 24px;">Talias<span style="color: #ec4899;">.</span>Place</h2>
-            <p style="color: #ec4899; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; margin: 6px 0 0 0;">New Appointment Booking</p>
-        </div>
-        
-        <div style="margin-bottom: 20px;">
-            <span style="display: inline-block; background-color: #fdf2f8; color: #db2777; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 9999px; margin-bottom: 12px;">
-                {service_name}
-            </span>
-            <h3 style="color: #111827; margin: 0; font-size: 20px;">{booking_instance.name}</h3>
-        </div>
-
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
-            <tr style="border-bottom: 1px solid #f3f4f6;">
-                <td style="padding: 10px 0; color: #6b7280; width: 140px;"><strong>Client Email:</strong></td>
-                <td style="padding: 10px 0;"><a href="mailto:{booking_instance.email}" style="color: #ec4899; text-decoration: none;">{booking_instance.email}</a></td>
-            </tr>
-            <tr style="border-bottom: 1px solid #f3f4f6;">
-                <td style="padding: 10px 0; color: #6b7280;"><strong>Phone Number:</strong></td>
-                <td style="padding: 10px 0; color: #111827; font-weight: 500;">
-                    <a href="tel:{booking_instance.phone}" style="color: #111827; text-decoration: none;">{booking_instance.phone}</a>
-                </td>
-            </tr>
-            <tr style="border-bottom: 1px solid #f3f4f6;">
-                <td style="padding: 10px 0; color: #6b7280;"><strong>Preferred Date:</strong></td>
-                <td style="padding: 10px 0; color: #111827; font-weight: 600;">{booking_instance.date}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #f3f4f6;">
-                <td style="padding: 10px 0; color: #6b7280;"><strong>Preferred Time:</strong></td>
-                <td style="padding: 10px 0; color: #111827; font-weight: 600;">{booking_instance.time}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #f3f4f6;">
-                <td style="padding: 10px 0; color: #6b7280;"><strong>Location / Type:</strong></td>
-                <td style="padding: 10px 0; color: #111827;">{apt_type}</td>
-            </tr>
-        </table>
-
-        {f'''
-        <div style="background-color: #f9fafb; border-left: 4px solid #ec4899; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
-            <p style="margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; color: #6b7280; font-weight: 600;">Additional Notes:</p>
-            <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.6;">{booking_instance.message}</p>
-        </div>
-        ''' if booking_instance.message else ''}
-
-        <div style="background-color: #fdf2f8; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 13px; color: #9d174d;">
-                You can manage or confirm this appointment in your <a href="http://localhost:5173/dashboard" style="color: #db2777; font-weight: 600; text-decoration: underline;">Admin Dashboard</a>.
-            </p>
-        </div>
-
-        <div style="text-align: center; border-top: 1px solid #f3f4f6; padding-top: 16px; font-size: 12px; color: #9ca3af;">
-            Talia's Place · Professional Makeup Artistry · Abuja, Nigeria
-        </div>
-    </div>
-    """
-
     try:
+        config = get_active_smtp_config()
+        backend = get_backend_for_config(config)
+
+        service_name = getattr(booking_instance, "get_service_display", lambda: getattr(booking_instance, "service", "Unknown"))()
+        apt_type = getattr(booking_instance, "get_appointment_type_display", lambda: getattr(booking_instance, "appointment_type", "Standard"))()
+
+        subject = f"✨ New Booking Request: {booking_instance.name} - {service_name}"
+        from_email = getattr(config, "default_from_email", None) or getattr(config, "webmail_user", None) or "info@taliasplace.com"
+        to_email = getattr(config, "notification_recipient_email", None) or getattr(settings, "CONTACT_NOTIFICATION_EMAIL", "perpetualasadueze@gmail.com")
+
+        text_body = (
+            f"You have received a new appointment booking request on Talia's Place:\n\n"
+            f"Client Name: {booking_instance.name}\n"
+            f"Email: {booking_instance.email}\n"
+            f"Phone: {booking_instance.phone}\n"
+            f"Service: {service_name}\n"
+            f"Date: {booking_instance.date}\n"
+            f"Time: {booking_instance.time}\n"
+            f"Appointment Type: {apt_type}\n\n"
+            f"Client Notes:\n{booking_instance.message or 'None'}\n"
+        )
+
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #f3f4f6; border-radius: 16px; background-color: #ffffff;">
+            <div style="background-color: #000000; padding: 24px; border-radius: 12px; text-align: center; margin-bottom: 24px;">
+                <h2 style="color: #ffffff; margin: 0; font-size: 24px;">Talias<span style="color: #ec4899;">.</span>Place</h2>
+                <p style="color: #ec4899; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; margin: 6px 0 0 0;">New Appointment Booking</p>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <span style="display: inline-block; background-color: #fdf2f8; color: #db2777; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 9999px; margin-bottom: 12px;">
+                    {service_name}
+                </span>
+                <h3 style="color: #111827; margin: 0; font-size: 20px;">{booking_instance.name}</h3>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px 0; color: #6b7280; width: 140px;"><strong>Client Email:</strong></td>
+                    <td style="padding: 10px 0;"><a href="mailto:{booking_instance.email}" style="color: #ec4899; text-decoration: none;">{booking_instance.email}</a></td>
+                </tr>
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px 0; color: #6b7280;"><strong>Phone Number:</strong></td>
+                    <td style="padding: 10px 0; color: #111827; font-weight: 500;">
+                        <a href="tel:{booking_instance.phone}" style="color: #111827; text-decoration: none;">{booking_instance.phone}</a>
+                    </td>
+                </tr>
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px 0; color: #6b7280;"><strong>Preferred Date:</strong></td>
+                    <td style="padding: 10px 0; color: #111827; font-weight: 600;">{booking_instance.date}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px 0; color: #6b7280;"><strong>Preferred Time:</strong></td>
+                    <td style="padding: 10px 0; color: #111827; font-weight: 600;">{booking_instance.time}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px 0; color: #6b7280;"><strong>Location / Type:</strong></td>
+                    <td style="padding: 10px 0; color: #111827;">{apt_type}</td>
+                </tr>
+            </table>
+
+            {f'''
+            <div style="background-color: #f9fafb; border-left: 4px solid #ec4899; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
+                <p style="margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; color: #6b7280; font-weight: 600;">Additional Notes:</p>
+                <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.6;">{booking_instance.message}</p>
+            </div>
+            ''' if booking_instance.message else ''}
+
+            <div style="background-color: #fdf2f8; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 13px; color: #9d174d;">
+                    You can manage or confirm this appointment in your <a href="http://localhost:5173/dashboard" style="color: #db2777; font-weight: 600; text-decoration: underline;">Admin Dashboard</a>.
+                </p>
+            </div>
+
+            <div style="text-align: center; border-top: 1px solid #f3f4f6; padding-top: 16px; font-size: 12px; color: #9ca3af;">
+                Talia's Place · Professional Makeup Artistry · Abuja, Nigeria
+            </div>
+        </div>
+        """
+
         msg = EmailMultiAlternatives(
             subject=subject,
             body=text_body,

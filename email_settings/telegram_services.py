@@ -12,7 +12,11 @@ def get_active_telegram_config():
     """
     Returns active TelegramSettings profile from database if present and active.
     """
-    return TelegramSettings.objects.filter(is_active=True).first()
+    try:
+        return TelegramSettings.objects.filter(is_active=True).first()
+    except Exception as exc:
+        logger.warning(f"Could not load active TelegramSettings from database: {exc}")
+        return None
 
 
 def send_telegram_raw_message(bot_token, chat_id, text, parse_mode="HTML"):
@@ -83,22 +87,22 @@ def notify_telegram_contact(contact_instance):
     """
     Sends an instant Telegram notification for a new Contact Message.
     """
-    config = get_active_telegram_config()
-    if not config or not config.notify_on_contact or not config.bot_token or not config.chat_id:
-        return False
-
-    name = html.escape(str(contact_instance.name or ''))
-    email = html.escape(str(contact_instance.email or ''))
-    message = html.escape(str(contact_instance.message or ''))
-
-    text = (
-        "💌 <b>New Website Message — Talia's Place</b>\n\n"
-        f"👤 <b>Client:</b> {name}\n"
-        f"📧 <b>Email:</b> {email}\n\n"
-        f"💬 <b>Message:</b>\n{message}\n"
-    )
-
     try:
+        config = get_active_telegram_config()
+        if not config or not getattr(config, "notify_on_contact", False) or not getattr(config, "bot_token", None) or not getattr(config, "chat_id", None):
+            return False
+
+        name = html.escape(str(contact_instance.name or ''))
+        email = html.escape(str(contact_instance.email or ''))
+        message = html.escape(str(contact_instance.message or ''))
+
+        text = (
+            "💌 <b>New Website Message — Talia's Place</b>\n\n"
+            f"👤 <b>Client:</b> {name}\n"
+            f"📧 <b>Email:</b> {email}\n\n"
+            f"💬 <b>Message:</b>\n{message}\n"
+        )
+
         success, _ = send_telegram_raw_message(config.bot_token, config.chat_id, text)
         return success
     except Exception as exc:
@@ -110,34 +114,34 @@ def notify_telegram_booking(booking_instance):
     """
     Sends an instant Telegram notification for a new BookMe appointment.
     """
-    config = get_active_telegram_config()
-    if not config or not config.notify_on_booking or not config.bot_token or not config.chat_id:
-        return False
-
-    service_name = html.escape(str(getattr(booking_instance, "get_service_display", lambda: booking_instance.service)()))
-    apt_type = html.escape(str(getattr(booking_instance, "get_appointment_type_display", lambda: booking_instance.appointment_type)()))
-    client_name = html.escape(str(booking_instance.name or ''))
-    phone = html.escape(str(booking_instance.phone or ''))
-    email = html.escape(str(booking_instance.email or ''))
-    date = html.escape(str(booking_instance.date or ''))
-    time = html.escape(str(booking_instance.time or ''))
-
-    text = (
-        "✨ <b>New Appointment Booking! — Talia's Place</b>\n\n"
-        f"💄 <b>Service:</b> {service_name}\n"
-        f"👤 <b>Client:</b> {client_name}\n"
-        f"📞 <b>Phone:</b> {phone}\n"
-        f"📧 <b>Email:</b> {email}\n"
-        f"📅 <b>Date:</b> {date}\n"
-        f"⏰ <b>Time:</b> {time}\n"
-        f"📍 <b>Type:</b> {apt_type}\n"
-    )
-
-    if booking_instance.message:
-        escaped_notes = html.escape(str(booking_instance.message))
-        text += f"\n📝 <b>Notes:</b>\n{escaped_notes}\n"
-
     try:
+        config = get_active_telegram_config()
+        if not config or not getattr(config, "notify_on_booking", False) or not getattr(config, "bot_token", None) or not getattr(config, "chat_id", None):
+            return False
+
+        service_name = html.escape(str(getattr(booking_instance, "get_service_display", lambda: getattr(booking_instance, "service", "Unknown"))()))
+        apt_type = html.escape(str(getattr(booking_instance, "get_appointment_type_display", lambda: getattr(booking_instance, "appointment_type", "Standard"))()))
+        client_name = html.escape(str(booking_instance.name or ''))
+        phone = html.escape(str(booking_instance.phone or ''))
+        email = html.escape(str(booking_instance.email or ''))
+        date = html.escape(str(booking_instance.date or ''))
+        time = html.escape(str(booking_instance.time or ''))
+
+        text = (
+            "✨ <b>New Appointment Booking! — Talia's Place</b>\n\n"
+            f"💄 <b>Service:</b> {service_name}\n"
+            f"👤 <b>Client:</b> {client_name}\n"
+            f"📞 <b>Phone:</b> {phone}\n"
+            f"📧 <b>Email:</b> {email}\n"
+            f"📅 <b>Date:</b> {date}\n"
+            f"⏰ <b>Time:</b> {time}\n"
+            f"📍 <b>Type:</b> {apt_type}\n"
+        )
+
+        if booking_instance.message:
+            escaped_notes = html.escape(str(booking_instance.message))
+            text += f"\n📝 <b>Notes:</b>\n{escaped_notes}\n"
+
         success, _ = send_telegram_raw_message(config.bot_token, config.chat_id, text)
         return success
     except Exception as exc:
