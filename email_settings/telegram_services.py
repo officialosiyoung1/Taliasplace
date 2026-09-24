@@ -4,19 +4,36 @@ import logging
 import urllib.request
 import urllib.error
 
-from .models import TelegramSettings
+import os
+from django.conf import settings
+# from .models import TelegramSettings
 
 logger = logging.getLogger(__name__)
 
 def get_active_telegram_config():
     """
     Returns active TelegramSettings profile from database if present and active.
+    Falls back to environment variables (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) if available.
     """
     try:
-        return TelegramSettings.objects.filter(is_active=True).first()
+        config = TelegramSettings.objects.filter(is_active=True).first()
+        if config:
+            return config
     except Exception as exc:
         logger.warning(f"Could not load active TelegramSettings from database: {exc}")
-        return None
+
+    # Fallback to environment variables
+    bot_token = getattr(settings, "TELEGRAM_BOT_TOKEN", None) or os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = getattr(settings, "TELEGRAM_CHAT_ID", None) or os.getenv("TELEGRAM_CHAT_ID")
+    if bot_token and chat_id:
+        class FallbackTelegramConfig:
+            bot_token = bot_token.strip()
+            chat_id = str(chat_id).strip()
+            notify_on_contact = True
+            notify_on_booking = True
+        return FallbackTelegramConfig()
+
+    return None
 
 
 def send_telegram_raw_message(bot_token, chat_id, text, parse_mode="HTML"):

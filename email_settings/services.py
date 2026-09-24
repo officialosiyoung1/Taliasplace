@@ -133,6 +133,10 @@ def send_contact_notification(contact_instance):
     Sends an inquiry email notification to admin whenever a contact message is submitted.
     """
     try:
+        if not getattr(settings, "ENABLE_EMAIL", True):
+            logger.info("Email notification skipped (ENABLE_EMAIL is disabled).")
+            return False
+
         config = get_active_smtp_config()
         if not getattr(config, "webmail_user", None) or not getattr(config, "webmail_password", None):
             logger.warning("SMTP credentials not configured (EMAIL_HOST_USER / EMAIL_HOST_PASSWORD missing). Skipping email dispatch.")
@@ -193,6 +197,12 @@ def send_contact_notification(contact_instance):
         msg.attach_alternative(html_body, "text/html")
         msg.send(fail_silently=False)
         return True
+    except OSError as exc:
+        if getattr(exc, "errno", None) in (101, 65) or "unreachable" in str(exc).lower():
+            logger.warning("SMTP email skipped: outbound port is unreachable/blocked by hosting provider (Render Free tier).")
+        else:
+            logger.error(f"Error sending contact notification email: {exc}", exc_info=True)
+        return False
     except Exception as exc:
         logger.error(f"Error sending contact notification email: {exc}", exc_info=True)
         return False
@@ -203,6 +213,10 @@ def send_booking_notification(booking_instance):
     Sends an appointment booking alert to admin whenever a BookMe request is submitted.
     """
     try:
+        if not getattr(settings, "ENABLE_EMAIL", True):
+            logger.info("Email notification skipped (ENABLE_EMAIL is disabled).")
+            return False
+
         config = get_active_smtp_config()
         if not getattr(config, "webmail_user", None) or not getattr(config, "webmail_password", None):
             logger.warning("SMTP credentials not configured (EMAIL_HOST_USER / EMAIL_HOST_PASSWORD missing). Skipping email dispatch.")
@@ -298,6 +312,12 @@ def send_booking_notification(booking_instance):
         msg.attach_alternative(html_body, "text/html")
         msg.send(fail_silently=False)
         return True
+    except OSError as exc:
+        if getattr(exc, "errno", None) in (101, 65) or "unreachable" in str(exc).lower():
+            logger.warning("SMTP email skipped: outbound port is unreachable/blocked by hosting provider (Render Free tier).")
+        else:
+            logger.error(f"Error sending booking notification email: {exc}", exc_info=True)
+        return False
     except Exception as exc:
         logger.error(f"Error sending booking notification email: {exc}", exc_info=True)
         return False
