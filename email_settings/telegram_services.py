@@ -6,7 +6,6 @@ import urllib.error
 
 import os
 from django.conf import settings
-# from .models import TelegramSettings
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +15,7 @@ def get_active_telegram_config():
     Falls back to environment variables (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) if available.
     """
     try:
+        from .models import TelegramSettings
         config = TelegramSettings.objects.filter(is_active=True).first()
         if config:
             return config

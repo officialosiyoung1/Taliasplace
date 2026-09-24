@@ -76,7 +76,7 @@ ehthumbs.db
 .mypy_cache/
 
 # pyenv
-.python-version
+# .python-version is tracked for Render python version pin
 
 # celery beat schedule
 celerybeat-schedule
