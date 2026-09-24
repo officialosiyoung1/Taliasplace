@@ -54,6 +54,7 @@ htmlcov/
 *.log
 local_settings.py
 db.sqlite3
+sqlite_data_backup.json
 media/
 staticfiles/
 static/
